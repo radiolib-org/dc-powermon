@@ -54,19 +54,24 @@ static int run() {
     return(ret);
   }
 
-  // set the configuration
+  // set the configuration and calibration
   struct ina219_cfg_t ina_cfg;
   ina219_config_defaults(&ina_cfg);
   ina_cfg.wide_range = false;
+
+  // max 1 Amp, 100 mOhm shunt
+  ina219_calibration_set(1.0, 100.0);
   ina219_config_set(&ina_cfg);
 
   // start readout
-  fprintf(stdout, "   V_shunt   V_bus\n");
-  double v_shunt, v_bus;
+  fprintf(stdout, "   V_bus     V_shunt    I_shunt     P_shunt\n");
+  double v_bus, v_shunt, i_shunt, p_shunt;
   for(;;) {
-    v_shunt = ina219_read_shunt_voltage();
     v_bus = ina219_read_bus_voltage();
-    fprintf(stdout, " %6.2f mV %6.2f mV\r", v_shunt, v_bus);
+    v_shunt = ina219_read_shunt_voltage();
+    i_shunt = ina219_read_current();
+    p_shunt = i_shunt * v_bus; // it is a lot faster to multiply than send it over the I2C bus
+    fprintf(stdout, " %6.2f V  %6.2f mV %7.2f mA  %7.2f mW\r", v_bus, v_shunt, i_shunt, p_shunt);
     fflush(stdout);
   }
 

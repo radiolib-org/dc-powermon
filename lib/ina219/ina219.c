@@ -33,6 +33,9 @@
 // file descriptor for accessing the I2C device
 static int fd = -1;
 
+// calcualte current LSB value
+static double current_lsb = 1;
+
 static int ina219_read_register(uint8_t addr) {
   // write address to access
   if(write(fd, &addr, sizeof(addr)) != sizeof(addr)) {
@@ -101,6 +104,14 @@ int ina219_config_set(struct ina219_cfg_t* cfg) {
   return(ina219_write_register(INA219_REG_CONFIG, val));
 }
 
+int ina219_calibration_set(double max_current, double r_shunt) {
+  // current_lsb  = max_current / 2^15
+  // cal = trunc( 0.04096 / (current_lsb * r_shunt) )
+  current_lsb = max_current / (double)(1UL << 15);
+  uint16_t cal = 40.96 / (current_lsb * r_shunt); // r_shunt is in mOhm
+  return(ina219_write_register(INA219_REG_CALIBRATION, cal) << 1);
+}
+
 double ina219_read_shunt_voltage() {
   return((int16_t)ina219_read_register(INA219_REG_SHUNT_VOLTAGE) * 0.01);
 }
@@ -110,6 +121,7 @@ double ina219_read_bus_voltage() {
   return((int16_t)((raw >> 3) * 4) * 0.001);
 }
 
-int ina219_calibration_set(float max_current, int r_shunt) {
-
+double ina219_read_current() {
+  int16_t raw = ina219_read_register(INA219_REG_CURRENT);
+  return((double)raw * current_lsb * 1000.0);
 }

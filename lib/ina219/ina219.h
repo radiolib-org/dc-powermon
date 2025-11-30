@@ -35,7 +35,9 @@ int ina219_end();
 int ina219_reset();
 void ina219_config_defaults(struct ina219_cfg_t* cfg);
 int ina219_config_set(struct ina219_cfg_t* cfg);
+int ina219_calibration_set(double max_current, double r_shunt);
 double ina219_read_shunt_voltage();
 double ina219_read_bus_voltage();
+double ina219_read_current();
 
 #endif
