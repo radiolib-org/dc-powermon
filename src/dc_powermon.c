@@ -18,16 +18,11 @@
 // some default configuration values
 #define INA219_ADDR_DEFAULT       0x40  // default for unmodified RadioHAT Rev. C
 
-// app configuration structure
-static struct conf_t {
-  int addr;
-} conf = {
-  .addr = INA219_ADDR_DEFAULT,
-};
-
 // argtable arguments
 static struct args_t {
   struct arg_int* addr;
+  struct arg_dbl* max_current;
+  struct arg_dbl* r_shunt;
   struct arg_lit* help;
   struct arg_end* end;
 } args;
@@ -47,22 +42,6 @@ static void exithandler(void) {
 }
 
 static int run() {
-  // start the power meter
-  int ret = ina219_begin("/dev/i2c-1", conf.addr);
-  if(ret) {
-    fprintf(stderr, "ERROR: Failed to open I2C port\n");
-    return(ret);
-  }
-
-  // set the configuration and calibration
-  struct ina219_cfg_t ina_cfg;
-  ina219_config_defaults(&ina_cfg);
-  ina_cfg.wide_range = false;
-
-  // max 1 Amp, 100 mOhm shunt
-  ina219_calibration_set(1.0, 100.0);
-  ina219_config_set(&ina_cfg);
-
   // start readout
   fprintf(stdout, "   V_bus     V_shunt    I_shunt     P_shunt\n");
   double v_bus, v_shunt, i_shunt, p_shunt;
@@ -75,12 +54,14 @@ static int run() {
     fflush(stdout);
   }
 
-  return(ret);
+  return(0);
 }
 
 int main(int argc, char** argv) {
   void *argtable[] = {
     args.addr = arg_int0("a", "addr", NULL, "I2C address of the INA219, defaults to " STR(INA219_ADDR_DEFAULT)),
+    args.max_current = arg_dbl0("i", "max_current", "Amps", "Maximum current expected to flow through the shunt ressistor, defaults to 1.0 A"),
+    args.r_shunt = arg_dbl0("r", "r_shunt", "milliOhms", "Shunt resistor value, defaults to 100.0 mOhm"),
     args.help = arg_lit0(NULL, "help", "Display this help and exit"),
     args.end = arg_end(2),
   };
@@ -113,7 +94,27 @@ int main(int argc, char** argv) {
   atexit(exithandler);
   signal(SIGINT, sighandler);
 
-  if(args.addr->count) { conf.addr = args.addr->ival[0]; }
+  // parse arguments
+  int addr = INA219_ADDR_DEFAULT;
+  if(args.addr->count) { addr = args.addr->ival[0]; }
+  double max_current = 1.0;
+  if(args.max_current->count) { max_current = args.max_current->dval[0]; }
+  double r_shunt = 100.0;
+  if(args.r_shunt->count) { max_current = args.r_shunt->dval[0]; }
+
+  // start the power meter
+  int ret = ina219_begin("/dev/i2c-1", addr);
+  if(ret) {
+    fprintf(stderr, "ERROR: Failed to open I2C port\n");
+    return(ret);
+  }
+
+  // set the configuration and calibration
+  struct ina219_cfg_t ina_cfg;
+  ina219_config_defaults(&ina_cfg);
+  ina_cfg.wide_range = false;
+  ina219_calibration_set(max_current, r_shunt);
+  ina219_config_set(&ina_cfg);
 
   exitcode = run();
 
