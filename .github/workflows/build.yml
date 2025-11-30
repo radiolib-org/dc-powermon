@@ -19,14 +19,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake wget
-        wget http://abyz.me.uk/lg/lg.zip
-        unzip lg.zip
-        cd lg
-        make
-        sudo make install
-        cd ..
-        sudo rm -rf lg
+        sudo apt-get install -y cmake
     
     - name: Build the project
       run: ./build.sh
