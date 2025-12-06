@@ -6,6 +6,8 @@ set(CMAKE_BUILD_TYPE Release)
 
 add_subdirectory("lib/argtable3")
 add_subdirectory("lib/ina219")
+add_subdirectory("lib/socket")
+add_subdirectory("lib/dc-powermon-client")
 
 file(GLOB SOURCES "src/*.c")
 
@@ -19,7 +21,7 @@ execute_process(
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PUBLIC lib)
-target_link_libraries(${PROJECT_NAME} argtable3 ina219 m)
+target_link_libraries(${PROJECT_NAME} argtable3 ina219 socket m)
 target_compile_options(${PROJECT_NAME} PUBLIC -Wall -Wextra -Wpedantic -Wdouble-promotion)
 target_compile_definitions(${PROJECT_NAME} PUBLIC -DGITREV="${GIT_REV_HASH}")
 

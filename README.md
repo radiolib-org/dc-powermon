@@ -19,4 +19,3 @@ In order of priorities:
 
 * implement sampling rate control and/or decimation
 * export timeseries in some reusable format
-* allow control and data readout via sockets
