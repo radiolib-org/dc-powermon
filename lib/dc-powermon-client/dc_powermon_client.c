@@ -107,6 +107,27 @@ int dc_powermon_read_power(float* val) {
   return(ret);
 }
 
+int dc_powermon_read_current(float* val) {
+  char rpl_buff[256];
+  int ret = scpi_exec(DC_POWERMON_CMD_READ_CURRENT, rpl_buff);
+  if(val) { *val = strtof(rpl_buff, NULL); }
+  return(ret);
+}
+
+int dc_powermon_read_vbus(float* val) {
+  char rpl_buff[256];
+  int ret = scpi_exec(DC_POWERMON_CMD_READ_V_BUS, rpl_buff);
+  if(val) { *val = strtof(rpl_buff, NULL); }
+  return(ret);
+}
+
+int dc_powermon_read_vshunt(float* val) {
+  char rpl_buff[256];
+  int ret = scpi_exec(DC_POWERMON_CMD_READ_V_SHUNT, rpl_buff);
+  if(val) { *val = strtof(rpl_buff, NULL); }
+  return(ret);
+}
+
 int dc_powermon_exit() {
   return(scpi_exec(DC_POWERMON_CMD_SYSTEM_EXIT, NULL));
 }
