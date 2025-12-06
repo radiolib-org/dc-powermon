@@ -33,13 +33,18 @@ static struct conf_t {
   .socket_fd = -1,
 };
 
+enum sample_type_e {
+  V_BUS = 0,
+  V_SHUNT,
+  I_SHUNT,
+  P_SHUNT,
+  NUM_SAMPLE_TYPES,
+};
+
 // structure to save data about a single sample
 // TODO add timestamp
 struct sample_t {
-  double v_bus;
-  double v_shunt;
-  double i_shunt;
-  double p_shunt; 
+  double val[NUM_SAMPLE_TYPES];
 };
 
 // structure holding information about the minimum and maximum
@@ -48,15 +53,15 @@ static struct stats_t {
   struct sample_t max;
   struct sample_t avg;
 } stats = {
-  .min = { .v_bus = 99,  .v_shunt = 99,   .i_shunt = 9999,  .p_shunt = 9999  },
-  .max = { .v_bus = -99, .v_shunt = -99,  .i_shunt = -9999, .p_shunt = -9999 },
-  .avg = { .v_bus = 0,   .v_shunt = 0,    .i_shunt = 0,     .p_shunt = 0     },
+  .min = { .val = {  99,  99,  9999,  9999 } },
+  .max = { .val = { -99, -99, -9999, -9999 } },
+  .avg = { .val = {   0,   0,     0,     0 } },
 };
 
 // averaging window
 #define BUFF_SIZE             4096
-static float avg_window[BUFF_SIZE] = { 0 };
-static float* avg_ptr = avg_window;
+static struct sample_t avg_window[BUFF_SIZE] = { 0 };
+static struct sample_t* avg_ptr = avg_window;
 
 // argtable arguments
 static struct args_t {
@@ -84,26 +89,33 @@ static void exithandler(void) {
 }
 
 static void stats_reset() {
-  // TODO
+  stats.min.val[V_BUS] = 99; stats.min.val[V_SHUNT] = 99;
+  stats.min.val[I_SHUNT] = 9999; stats.min.val[P_SHUNT] = 9999;
+  stats.max.val[V_BUS] = -99; stats.max.val[V_SHUNT] = -99;
+  stats.max.val[I_SHUNT] = -9999; stats.max.val[P_SHUNT] = -9999;
+  stats.avg.val[V_BUS] = 0; stats.avg.val[V_SHUNT] = 0;
+  stats.avg.val[I_SHUNT] = 0; stats.avg.val[P_SHUNT] = 0;
 }
 
 static void stats_update(struct sample_t* sample) {
-  // update statistics
-  // TODO also current and voltages
-  if(sample->p_shunt < stats.min.p_shunt) {
-    stats.min.p_shunt = sample->p_shunt;
-  } else if(sample->p_shunt > stats.max.p_shunt) {
-    stats.max.p_shunt = sample->p_shunt;
+  memcpy(avg_ptr, sample, sizeof(struct sample_t));
+
+  for(int i = 0; i < NUM_SAMPLE_TYPES; i++) {
+    // update statistics
+    if(sample->val[i] < stats.min.val[i]) {
+      stats.min.val[i] = sample->val[i];
+    } else if(sample->val[i] > stats.max.val[i]) {
+      stats.max.val[i] = stats.min.val[i];
+    }
+    
+    // calculate the average
+    stats.avg.val[i] = 0;
+    for(int j = 0; j < conf.window; j++) {
+      stats.avg.val[i] += (double)avg_window[j].val[i];
+    }
+    stats.avg.val[i] /= conf.window;
   }
 
-  // calculate the average
-  // TODO also current and voltages
-  *avg_ptr = sample->p_shunt;
-  stats.avg.p_shunt = 0;
-  for(int i = 0; i < conf.window; i++) {
-    stats.avg.p_shunt += (double)avg_window[i];
-  }
-  stats.avg.p_shunt /= conf.window;
   avg_ptr++;
   if((avg_ptr - avg_window) > conf.window) {
     avg_ptr = avg_window;
@@ -113,7 +125,16 @@ static void stats_update(struct sample_t* sample) {
 static void process_socket_cmd(int fd, char* cmd) {
   char buff[64] = { 0 };
   if(strstr(cmd, DC_POWERMON_CMD_READ_POWER) == cmd) {
-    sprintf(buff, "%.2fmW" DC_POWERMON_RSP_LINEFEED, (double)stats.avg.p_shunt);
+    sprintf(buff, "%.2fmW" DC_POWERMON_RSP_LINEFEED, (double)stats.avg.val[P_SHUNT]);
+  
+  } else if(strstr(cmd, DC_POWERMON_CMD_READ_CURRENT) == cmd) {
+    sprintf(buff, "%.2fmA" DC_POWERMON_RSP_LINEFEED, (double)stats.avg.val[I_SHUNT]);
+  
+  } else if(strstr(cmd, DC_POWERMON_CMD_READ_V_BUS) == cmd) {
+    sprintf(buff, "%.2fV" DC_POWERMON_RSP_LINEFEED, (double)stats.avg.val[V_BUS]);
+  
+  } else if(strstr(cmd, DC_POWERMON_CMD_READ_V_SHUNT) == cmd) {
+    sprintf(buff, "%.2fmV" DC_POWERMON_RSP_LINEFEED, (double)stats.avg.val[V_SHUNT]);
 
   } else if(strstr(cmd, DC_POWERMON_CMD_RESET) == cmd) {
     stats_reset();
@@ -140,15 +161,15 @@ static int run() {
   struct sample_t sample;
   int read_socket_fd = 0;
   for(;;) {
-    sample.v_bus = ina219_read_bus_voltage();
-    sample.v_shunt = ina219_read_shunt_voltage();
-    sample.i_shunt = ina219_read_current();
-    sample.p_shunt = sample.i_shunt * sample.v_bus; // it is a lot faster to multiply than send it over the I2C bus
+    sample.val[V_BUS] = ina219_read_bus_voltage();
+    sample.val[V_SHUNT] = ina219_read_shunt_voltage();
+    sample.val[I_SHUNT] = ina219_read_current();
+    sample.val[P_SHUNT] = sample.val[I_SHUNT] * sample.val[V_BUS]; // it is a lot faster to multiply than send it over the I2C bus
 
     // update statistics
     stats_update(&sample);
 
-    fprintf(stdout, " %6.2f V  %6.2f mV %7.2f mA  %7.2f mW\r", sample.v_bus, sample.v_shunt, sample.i_shunt, stats.avg.p_shunt);
+    fprintf(stdout, " %6.2f V  %6.2f mV %7.2f mA  %7.2f mW\r", stats.avg.val[V_BUS], stats.avg.val[V_SHUNT], stats.avg.val[I_SHUNT], stats.avg.val[P_SHUNT]);
     fflush(stdout);
 
     // check if there is something to read from the socket
